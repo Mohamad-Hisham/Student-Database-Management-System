@@ -53,6 +53,32 @@ class Database:
 
             return student.student_id
 
+    def add_students(self, students):
+        student_values = []
+
+        for student in students:
+            student_values.append(
+                (
+                    student.name,
+                    student.age,
+                    student.grade
+                )
+            )
+
+        with sqlite3.connect(self.database_path) as connection:
+            cursor = connection.cursor()
+
+            cursor.executemany(
+                """
+                INSERT INTO students (name, age, grade)
+                VALUES (?, ?, ?)
+                """,
+                student_values
+            )
+
+            connection.commit()
+
+        return len(student_values)
         
     def get_all_students(self):
         with sqlite3.connect(self.database_path) as connection:
@@ -148,3 +174,62 @@ class Database:
             )
 
             return cursor.rowcount > 0        
+
+    def get_students_by_name(self, name):
+        with sqlite3.connect(self.database_path) as connection:
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                SELECT id, name, age, grade
+                FROM students
+                WHERE name LIKE ? COLLATE NOCASE
+                """,
+                (f"%{name}%",)
+            )
+
+            rows = cursor.fetchall()
+
+        students = []
+
+        for row in rows:
+            student = Student(
+                name=row[1],
+                age=row[2],
+                grade=row[3],
+                student_id=row[0]
+            )
+
+            students.append(student)
+
+        return students
+
+
+    def get_students_by_grade(self, grade):
+        with sqlite3.connect(self.database_path) as connection:
+            cursor = connection.cursor()
+
+            cursor.execute(
+                """
+                SELECT id, name, age, grade
+                FROM students
+                WHERE grade = ? COLLATE NOCASE
+                """,
+                (grade,)
+            )
+
+            rows = cursor.fetchall()
+
+        students = []
+
+        for row in rows:
+            student = Student(
+                name=row[1],
+                age=row[2],
+                grade=row[3],
+                student_id=row[0]
+            )
+
+            students.append(student)
+
+        return students

@@ -1,13 +1,13 @@
 import json
 from hashlib import sha256
 from pathlib import Path
+import csv
 
 import streamlit as st
 
 from src.database import Database
 from src.chatbot import Chatbot
 from src.student import Student
-
 BASE_DIR = Path(__file__).resolve().parent
 USERS_FILE = BASE_DIR / "data" / "users.json"
 CREDENTIALS_FILE = BASE_DIR / "data" / "credentials.json"
@@ -45,6 +45,16 @@ def logout():
     st.session_state.username = None
     st.session_state.role = None
 
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "Hello! I am the Student Database Chatbot. "
+                "Ask me a question about the students."
+            )
+        }
+    ]
+
 
 st.set_page_config(
     page_title="Student Database Management System",
@@ -66,6 +76,17 @@ if "username" not in st.session_state:
 if "role" not in st.session_state:
     st.session_state.role = None
 
+
+if "messages" not in st.session_state:
+    st.session_state.messages = [
+        {
+            "role": "assistant",
+            "content": (
+                "Hello! I am the Student Database Chatbot. "
+                "Ask me a question about the students."
+            )
+        }
+    ]
 
 st.title("🎓 Student Database Management System")
 
@@ -176,6 +197,29 @@ else:
         f"Role: {st.session_state.role}"
     )
 
+    st.sidebar.divider()
+
+    st.sidebar.subheader("Example Messages")
+
+    st.sidebar.write("• Hello")
+    st.sidebar.write("• How many students?")
+    st.sidebar.write("• Show all students")
+    st.sidebar.write("• Student ID 1")
+    st.sidebar.write("• Find student Ahmed")
+    st.sidebar.write("• Show students with grade A")
+    if st.session_state.role == "admin":
+        st.sidebar.write(
+            "• Add student Ahmed Mohamed, 20, A"
+        )
+        st.sidebar.write(
+            "• Update student 1, Ahmed Mohamed, 21, B"
+        )
+        st.sidebar.write(
+            "• Delete student 1"
+        )
+
+    st.sidebar.divider()
+
     if st.sidebar.button(
         "Logout",
         use_container_width=True
@@ -183,58 +227,189 @@ else:
         logout()
         st.rerun()
 
-    st.success(
-        f"Welcome, {st.session_state.username}!"
+    st.header("🤖 Student Database Chatbot")
+
+    st.caption(
+        "Type a message below to interact with the student database."
     )
 
-if st.session_state.role == "admin":
-    st.header("Admin Dashboard")
-    st.subheader("Add Student")
-
-    with st.form("add_student_form"):
-        name = st.text_input("Student Name")
-
-        age = st.number_input(
-            "Student Age",
-            min_value=1,
-            max_value=120,
-            step=1
-        )
-
-        grade = st.text_input("Student Grade")
-
-        add_student_button = st.form_submit_button(
-            "Add Student"
-        )
-
-    if add_student_button:
-        name = name.strip()
-        grade = grade.strip()
-
-        if not name or not grade:
-            st.error(
-                "Student name, age, and grade are required."
+    # CSV bulk upload — admins only
+    if st.session_state.role == "admin":
+        with st.sidebar.expander(" Bulk Upload Students"):
+            uploaded_file = st.file_uploader(
+                "Upload a CSV file",
+                type=["csv"],
+                key="students_csv"
             )
 
-        else:
-            try:
-                student = Student(
-                    name=name,
-                    age=int(age),
-                    grade=grade
+            if uploaded_file is not None:
+                if st.button(
+                    "Import Students",
+                    key="import_students_button",
+                    use_container_width=True
+                ):
+                    try:
+                        file_content = uploaded_file.getvalue().decode(
+                            "utf-8-sig"
+                        )
+
+                        csv_rows = csv.DictReader(
+                            file_content.splitlines()
+                        )
+
+                        required_columns = {
+                            "name",
+                            "age",
+                            "grade"
+                        }
+
+                        if csv_rows.fieldnames is None:
+                            st.error("The CSV file is empty.")
+
+                        elif not required_columns.issubset(
+                            set(csv_rows.fieldnames)
+                        ):
+                            st.error(
+                                "The CSV must contain these columns: "
+                                "name, age, grade."
+                            )
+
+                        else:
+                            students = []
+
+                            for row_number, row in enumerate(
+                                csv_rows,
+                                start=2
+                            ):
+                                name = row["name"].strip()
+                                age_text = row["age"].strip()
+                                grade = row["grade"].strip()
+
+                                if not name:
+                                    raise ValueError(
+                                        f"Name is missing in row "
+                                        f"{row_number}."
+                                    )
+
+                                if not age_text.isdigit():
+                                    raise ValueError(
+                                        f"Age must be a number in row "
+                                        f"{row_number}."
+                                    )
+
+                                age = int(age_text)
+
+                                if age < 1 or age > 120:
+                                    raise ValueError(
+                                        f"Invalid age in row "
+                                        f"{row_number}."
+                                    )
+
+                                if not grade:
+                                    raise ValueError(
+                                        f"Grade is missing in row "
+                                        f"{row_number}."
+                                    )
+
+                                students.append(
+                                    Student(
+                                        name=name,
+                                        age=age,
+                                        grade=grade
+                                    )
+                                )
+
+                            if len(students) == 0:
+                                st.error(
+                                    "The CSV contains no student records."
+                                )
+
+                            else:
+                                added_count = database.add_students(
+                                    students
+                                )
+
+                                st.success(
+                                    f"{added_count} students were "
+                                    f"imported successfully."
+                                )
+
+                    except UnicodeDecodeError:
+                        st.error(
+                            "The CSV file must use UTF-8 encoding."
+                        )
+
+                    except ValueError as error:
+                        st.error(str(error))
+
+                    except Exception as error:
+                        st.error(
+                            f"CSV import failed: {error}"
+                        )
+
+    # Display all previous chat messages.
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+            if message.get("type") == "table":
+                st.dataframe(
+                    message["data"],
+                    use_container_width=True,
+                    hide_index=True
                 )
+    # This must be outside the for loop.
+    user_message = st.chat_input(
+        "Ask something about the students...",
+        key="student_chat_input"
+    )
 
-                student_id = database.add_student(student)
+    if user_message:
+        # Save and display the user's message.
+        user_chat_message = {
+            "role": "user",
+            "content": user_message
+        }
 
-                st.success(
-                    f"Student added successfully with ID: {student_id}"
-                )
-
-            except ValueError as error:
-                st.error(str(error))
-
-    elif st.session_state.role == "user":
-        st.header("User Dashboard")
-        st.info(
-            "The student chatbot will be added here."
+        st.session_state.messages.append(
+            user_chat_message
         )
+
+        with st.chat_message("user"):
+            st.markdown(user_message)
+
+        # Send the message to the chatbot.
+        chatbot_response = chatbot.respond(
+            user_message,
+            st.session_state.role
+        )
+
+        # Prepare the chatbot message.
+        assistant_message = {
+            "role": "assistant",
+            "content": chatbot_response["message"],
+            "type": chatbot_response["type"]
+        }
+
+        if chatbot_response["type"] == "table":
+            assistant_message["data"] = (
+                chatbot_response["data"]
+            )
+
+        # Save every response, whether text or table.
+        st.session_state.messages.append(
+            assistant_message
+        )
+
+        # Display the chatbot response.
+        with st.chat_message("assistant"):
+            st.markdown(
+                chatbot_response["message"]
+            )
+
+            if chatbot_response["type"] == "table":
+                st.dataframe(
+                    chatbot_response["data"],
+                    use_container_width=True,
+                    hide_index=True
+                )
