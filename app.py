@@ -347,7 +347,7 @@ else:
                             f"CSV import failed: {error}"
                         )
 
-    # Display all previous chat messages.
+    
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
@@ -358,14 +358,14 @@ else:
                     use_container_width=True,
                     hide_index=True
                 )
-    # This must be outside the for loop.
+    
     user_message = st.chat_input(
         "Ask something about the students...",
         key="student_chat_input"
     )
 
     if user_message:
-        # Save and display the user's message.
+        
         user_chat_message = {
             "role": "user",
             "content": user_message
@@ -378,13 +378,13 @@ else:
         with st.chat_message("user"):
             st.markdown(user_message)
 
-        # Send the message to the chatbot.
+       
         chatbot_response = chatbot.respond(
             user_message,
             st.session_state.role
         )
 
-        # Prepare the chatbot message.
+        
         assistant_message = {
             "role": "assistant",
             "content": chatbot_response["message"],
@@ -396,12 +396,12 @@ else:
                 chatbot_response["data"]
             )
 
-        # Save every response, whether text or table.
+       
         st.session_state.messages.append(
             assistant_message
         )
 
-        # Display the chatbot response.
+        
         with st.chat_message("assistant"):
             st.markdown(
                 chatbot_response["message"]
